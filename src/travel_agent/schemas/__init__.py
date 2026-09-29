@@ -8,12 +8,24 @@ from travel_agent.schemas.options import (
     HotelOption,
     WeatherInfo,
 )
+from travel_agent.schemas.requirement import (
+    AnalystOutput,
+    BudgetRange,
+    ClarifyQuestion,
+    PREFERENCE_TAGS,
+    TripRequirement,
+)
 
 __all__ = [
+    "AnalystOutput",
     "AvailabilityInfo",
+    "BudgetRange",
+    "ClarifyQuestion",
     "DailyWeather",
     "FlightOption",
     "FlightStatus",
     "HotelOption",
+    "PREFERENCE_TAGS",
+    "TripRequirement",
     "WeatherInfo",
 ]

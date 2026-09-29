@@ -12,6 +12,14 @@ def no_fault(monkeypatch):
     monkeypatch.delenv("MOCK_FAULT", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def fake_llm_mode(monkeypatch):
+    """测试默认走 fake 离线模式,绝不调用真实 API(真实用例自行恢复)。"""
+    from travel_agent.config import settings
+
+    monkeypatch.setattr(settings, "eval_mode", "fake")
+
+
 def _to_plain(data):
     """工具结果 → 纯 dict/list,便于断言。
 

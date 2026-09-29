@@ -1,0 +1,8 @@
+M3: 需求分析师 Agent + LLM 接入层(fake/真实双模式)
+
+- schemas/requirement.py: TripRequirement/BudgetRange/ClarifyQuestion/AnalystOutput
+- llm/client.py: DeepSeek OpenAI 兼容封装,配置化可切换(换模型只改 .env)
+- llm/fake.py: 离线规则解析器(TA_EVAL_MODE=fake,无 API Key 可跑通)
+- agents/base.py: Agent 基类,结构化输出 + 解析失败重试
+- agents/analyst: 系统提示词(追问≤2轮/偏好标签/few-shot/安全规则) + Analyst.analyze()
+- 测试 11 条 fake 用例全绿 + 1 条真实 LLM 用例(无 Key 自动 skip)
