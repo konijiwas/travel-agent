@@ -1,6 +1,9 @@
 # 环境与密钥
 .env
 
+# 临时提交信息文件
+_commit_msg.txt
+
 # Python
 .venv/
 __pycache__/
