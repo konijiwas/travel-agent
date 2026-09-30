@@ -8,9 +8,17 @@
 未注册的 schema 抛 NotImplementedError(M4/M5 再补充生成器)。
 """
 
+import json
 import re
 from datetime import datetime, timedelta
 
+from travel_agent.schemas.budget import (
+    DEFAULT_RATIOS,
+    AdjustProposal,
+    BudgetAdjustment,
+    BudgetItem,
+    BudgetPlan,
+)
 from travel_agent.schemas.requirement import (
     AnalystOutput,
     BudgetRange,
@@ -153,7 +161,126 @@ def _generate_analyst_output(text: str) -> AnalystOutput:
     )
 
 
-_GENERATORS: dict = {AnalystOutput: _generate_analyst_output}
+def _generate_budget_plan(text: str) -> BudgetPlan:
+    """规则化预算规划:分项分配 → 超支检测 → 优先级链调整 → 超10%交用户确认。
+
+    输入 text 为 JSON 字符串(由 agents/budget/agent.py 构造):
+    {"requirement": {...}, "flight_options": [...], "hotel_options": [...]}
+    计算规则与 agents/budget/prompts.py 的 SYSTEM_PROMPT 逐条对齐。
+    """
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, TypeError) as e:
+        raise ValueError(f"预算输入不是合法 JSON:{e}") from e
+    req = data.get("requirement") or {}
+    flights = data.get("flight_options") or []
+    hotels = data.get("hotel_options") or []
+
+    budget_max = float(req["budget_range"]["max_cny"])
+    travelers = int(req["travelers"])
+    start = datetime.strptime(req["start_date"], "%Y-%m-%d")
+    end = datetime.strptime(req["end_date"], "%Y-%m-%d")
+    nights = max((end - start).days, 1)          # 住宿晚数(至少 1 晚)
+
+    # ── 分项预算(公式与提示词一致)──
+    if flights:
+        f = min(flights, key=lambda x: x["price_cny"])          # 最低价航班
+        transport = f["price_cny"] * travelers * 2
+        t_note = f"{f['flight_no']} 往返×{travelers}人(最低价估算)"
+    else:
+        transport = budget_max * DEFAULT_RATIOS["transport"]
+        t_note = "无航班数据,按参考比例 30%"
+    if hotels:
+        h = min(hotels, key=lambda x: x["price_per_night_cny"])  # 最低价酒店
+        hotel_cost = h["price_per_night_cny"] * nights
+        h_note = f"{h['name']} ¥{h['price_per_night_cny']}/晚 ×{nights}晚"
+    else:
+        hotel_cost = budget_max * DEFAULT_RATIOS["hotel"]
+        h_note = "无酒店数据,按参考比例 35%"
+
+    items = [
+        BudgetItem(category="transport", amount=round(transport, 2), note=t_note),
+        BudgetItem(category="hotel", amount=round(hotel_cost, 2), note=h_note),
+        BudgetItem(category="food", amount=round(100.0 * travelers * nights, 2),
+                   note=f"100元/人/天 ×{travelers}人 ×{nights}天"),
+        BudgetItem(category="activities", amount=round(budget_max * 0.15, 2),
+                   note="参考比例 15%"),
+        BudgetItem(category="buffer", amount=round(budget_max * 0.05, 2),
+                   note="机动金 5%"),
+    ]
+    adjustments: list[BudgetAdjustment] = []
+
+    def _total() -> float:
+        return sum(i.amount for i in items)
+
+    # ── 超支检测 ──
+    over = _total() - budget_max
+    if over <= 0:
+        return BudgetPlan(total_budget=round(_total(), 2), items=items)
+
+    # ── 调整优先级链 ──
+    # ① 削减非核心活动
+    act = items[3]
+    cut = min(act.amount, over)
+    if cut > 0:
+        adjustments.append(BudgetAdjustment(
+            reason=f"总价超出预算 {over:.0f} 元,执行优先级①:削减非核心活动",
+            from_item=f"activities:¥{act.amount:.0f}",
+            to_item=f"activities:¥{act.amount - cut:.0f}",
+            impact=f"省 ¥{cut:.0f}"))
+        act.amount = round(act.amount - cut, 2)
+        act.status = "adjusted"
+
+    # ② 替换更低档位:初始即已选最低价,无更低价可换(无操作空间)
+    # ③ 跨类重分配:先压缩 food(不低于 60 元/人/天),再压缩 buffer(最低 0)
+    over = _total() - budget_max
+    if over > 0:
+        food_item = items[2]
+        food_min = 60.0 * travelers * nights
+        cut = min(food_item.amount - food_min, over)
+        if cut > 0:
+            adjustments.append(BudgetAdjustment(
+                reason=f"仍超支 {over:.0f} 元,执行优先级③:压缩餐饮",
+                from_item=f"food:¥{food_item.amount:.0f}",
+                to_item=f"food:¥{food_item.amount - cut:.0f}",
+                impact=f"省 ¥{cut:.0f}(不低于60元/人/天)"))
+            food_item.amount = round(food_item.amount - cut, 2)
+            food_item.status = "adjusted"
+        over = _total() - budget_max
+    if over > 0:
+        buf = items[4]
+        cut = min(buf.amount, over)
+        if cut > 0:
+            adjustments.append(BudgetAdjustment(
+                reason=f"仍超支 {over:.0f} 元,执行优先级③:压缩机动金",
+                from_item=f"buffer:¥{buf.amount:.0f}",
+                to_item=f"buffer:¥{buf.amount - cut:.0f}",
+                impact=f"省 ¥{cut:.0f}"))
+            buf.amount = round(buf.amount - cut, 2)
+            buf.status = "adjusted"
+        over = _total() - budget_max
+
+    # ④ 仍超预算 10% → 停止自动调整,打包提案交用户确认
+    if over > budget_max * 0.1:
+        return BudgetPlan(
+            total_budget=round(_total(), 2),
+            items=items,
+            adjustments=adjustments,
+            needs_confirmation=True,
+            pending_proposal=AdjustProposal(
+                overrun_cny=round(over, 2),
+                proposal=[],
+                note="已按优先级链①③调整(②无更低档可换),仍超预算 10% 阈值,建议用户确认或追加预算",
+            ),
+        )
+    return BudgetPlan(total_budget=round(_total(), 2), items=items,
+                      adjustments=adjustments)
+
+
+_GENERATORS: dict = {
+    AnalystOutput: _generate_analyst_output,
+    BudgetPlan: _generate_budget_plan,
+}
 
 
 class FakeStructuredLLM:
