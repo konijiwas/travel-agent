@@ -20,6 +20,27 @@ def fake_llm_mode(monkeypatch):
     monkeypatch.setattr(settings, "eval_mode", "fake")
 
 
+@pytest.fixture(autouse=True)
+def fresh_trajectory(tmp_path, monkeypatch):
+    """每个测试 = 一条独立轨迹:换新账本与 tracer。
+
+    不走 run_trip/chat 入口直接调 graph.invoke 的测试,拿到的
+    ContextVar 默认账本/tracer 是进程级共享的 —— 不换新会导致
+    CostGuard 用量跨测试累计(撞 token 上限)与 trace 串扰。
+    同时把 trace 目录指到临时目录:测试打点不污染 data/traces。
+    """
+    from travel_agent.config import settings
+    from travel_agent.memory import jsonl_writer
+    from travel_agent.reliability import CostGuard, Tracer, set_guard, set_tracer
+
+    monkeypatch.setattr(settings, "trace_dir", str(tmp_path / "traces"))
+    jsonl_writer.get_writer.cache_clear()
+    set_guard(CostGuard())
+    set_tracer(Tracer(write_db=False))
+    yield
+    jsonl_writer.get_writer.cache_clear()
+
+
 def _to_plain(data):
     """工具结果 → 纯 dict/list,便于断言。
 

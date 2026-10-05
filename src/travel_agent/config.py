@@ -39,8 +39,12 @@ class Settings(BaseSettings):
 
     # ── 可靠性 ──
     tool_timeout_s: float = Field(5.0, validation_alias="TA_TOOL_TIMEOUT_S")
+    tool_retry_max: int = 2              # 工具调用最多尝试次数(含首次)
+    retry_base_delay_s: float = 0.5      # 指数退避起始等待
+    retry_max_delay_s: float = 5.0       # 单次重试等待上限(含 jitter)
     breaker_failure_threshold: int = 3
     breaker_recovery_s: float = 30.0
+    dry_run: bool = False                # True 时 confirm 类工具可预演执行(安全评测用)
     cost_limit_usd: float = Field(0.15, validation_alias="TA_COST_LIMIT_USD")
     cost_token_limit: int = 20_000
     price_in_usd_per_m: float = 0.28     # 输入价 $/百万 token(DeepSeek 可改)
@@ -57,7 +61,7 @@ class Settings(BaseSettings):
     ablate_small_gate: bool = False
 
     # ── 评测 ──
-    eval_mode: str = "llm"               # llm | fake(离线冒烟,不调用真实 API)
+    eval_mode: str = Field("llm", validation_alias="TA_EVAL_MODE")   # llm | fake(离线冒烟,不调用真实 API)
 
     def ensure_dirs(self) -> None:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
