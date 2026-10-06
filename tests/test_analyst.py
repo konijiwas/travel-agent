@@ -42,11 +42,12 @@ def test_budget_range_and_days_derived():
 # ── 边界:信息缺失 → 追问 ──
 
 def test_missing_budget_asks():
+    """只有开始日期无结束日期:日期也算缺失(半成品日期不放行)。"""
     out = _analyze("从上海出发,2026-10-05 去三亚,1人")
     assert "budget" in out.missing_fields
+    assert "dates" in out.missing_fields
     assert out.requirement is None
-    assert len(out.clarify_questions) == 1
-    assert out.clarify_questions[0].field == "budget"
+    assert len(out.clarify_questions) == 2
 
 
 def test_missing_travelers_asks():
@@ -55,10 +56,12 @@ def test_missing_travelers_asks():
     assert out.requirement is None
 
 
-def test_missing_origin_asks():
+def test_missing_origin_is_optional():
+    """出发地缺失不追问(schema 允许为空,取数时默认"上海")。"""
     out = _analyze("2026-11-05 到 2026-11-08 去成都,3个人,预算10000")
-    assert "origin_city" in out.missing_fields
-    assert out.requirement is None
+    assert out.missing_fields == []
+    assert out.requirement is not None
+    assert out.requirement.origin_city is None
 
 
 def test_missing_dates_asks():
@@ -92,7 +95,7 @@ def test_food_preference_tag():
 
 
 def test_multiple_preference_tags():
-    out = _analyze("商务出差去深圳,顺便吃美食,2026-11-01 出发,从上海出发,1人,预算10000")
+    out = _analyze("商务出差去深圳,顺便吃美食,2026-11-01 出发玩3天,从上海出发,1人,预算10000")
     req = out.requirement
     assert req is not None
     assert "business" in req.preferences

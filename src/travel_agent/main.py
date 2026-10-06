@@ -159,6 +159,18 @@ def replay(trace_id: str, limit: int):
         click.echo(line)
 
 
+@app.command(name="eval")
+@click.option("--cases", "cases_dir", default=None,
+              help="case 文件目录(默认 eval/cases)")
+@click.option("--verbose", is_flag=True, help="失败 case 打印 replay 命令")
+def eval_cmd(cases_dir: str | None, verbose: bool):
+    """跑评测集:15 条 case 端到端打分,通过率 ≥80% 为达标(退出码 0)。"""
+    from travel_agent.eval.run_eval import PASS_THRESHOLD, run_eval
+
+    _, summary = run_eval(cases_dir, verbose=verbose)
+    raise SystemExit(0 if summary["rate"] >= PASS_THRESHOLD else 1)
+
+
 @app.command(name="config")
 @click.argument("action")
 def config_cmd(action: str):

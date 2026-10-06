@@ -86,17 +86,22 @@ def _parse_travelers(text: str) -> int | None:
 
 
 def _parse_dates(text: str) -> tuple[str | None, str | None]:
-    """日期:支持 YYYY-MM-DD 与 YYYY年M月D日;含"玩N天"时自动推算结束日。"""
+    """日期:支持 YYYY-MM-DD 与 YYYY年M月D日;结束日支持三种推断:
+    ①第二个完整日期 ②"到M-D"简写(复用起始年份)③"玩/出差/待/住 N 天"推算。"""
     dates = []
     for m in re.finditer(r"(20\d{2})[-/年](\d{1,2})[-/月](\d{1,2})日?", text):
         dates.append(f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}")
     start = dates[0] if dates else None
     end = dates[1] if len(dates) > 1 else None
     if start and end is None:
-        m = re.search(r"玩\s*(\d+)\s*天", text)
+        m = re.search(r"到\s*(\d{1,2})[-/](\d{1,2})", text)
         if m:
-            end = (datetime.strptime(start, "%Y-%m-%d")
-                   + timedelta(days=int(m.group(1)) - 1)).strftime("%Y-%m-%d")
+            end = f"{start[:4]}-{int(m.group(1)):02d}-{int(m.group(2)):02d}"
+        else:
+            m = re.search(r"(?:玩|出差|待|住)\s*(\d+)\s*天", text)
+            if m:
+                end = (datetime.strptime(start, "%Y-%m-%d")
+                       + timedelta(days=int(m.group(1)) - 1)).strftime("%Y-%m-%d")
     return start, end
 
 
@@ -132,10 +137,10 @@ def _generate_analyst_output(text: str) -> AnalystOutput:
     if dest_m is None:
         missing.append("destination")
         questions.append(ClarifyQuestion(field="destination", question="请问您想去哪个城市?"))
-    if origin_m is None:
-        missing.append("origin_city")
-        questions.append(ClarifyQuestion(field="origin_city", question="请问从哪个城市出发?"))
-    if start is None:
+    # origin_city 可空(schema 允许):缺失不追问,取数时默认"上海"
+    if start is None or end is None:
+        # 起始与结束必须成对:半成品日期(只有 start)不能放行,
+        # 否则下游取数 strptime(None) 崩溃
         missing.append("dates")
         questions.append(ClarifyQuestion(field="dates", question="请问计划哪天出发、玩几天?"))
     if travelers is None:

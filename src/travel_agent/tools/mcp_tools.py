@@ -22,6 +22,7 @@
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 from typing import Any, TypeVar
@@ -67,6 +68,20 @@ def _server_log_file(server: str) -> Path:
     return _LOG_DIR / f"{server}_server.log"
 
 
+def _subprocess_env() -> dict[str, str]:
+    """传给 MCP 子进程的额外环境变量。
+
+    mcp SDK 拉起子进程时只继承白名单变量(PATH/SYSTEMROOT 等),
+    不会全量继承父进程环境 —— MOCK_FAULT 故障注入必须显式传递,
+    否则评测/测试的故障注入悄悄失效。
+    """
+    env: dict[str, str] = {}
+    fault = os.environ.get("MOCK_FAULT")
+    if fault:
+        env["MOCK_FAULT"] = fault
+    return env
+
+
 def _error_detail(result: Any) -> str:
     """从工具结果里提取错误信息(raise_on_error=False 时错误不抛异常)。"""
     try:
@@ -85,6 +100,7 @@ async def _call_server(server: str, tool: str, arguments: dict) -> Any:
     transport = StdioTransport(
         command=sys.executable,
         args=["-m", SERVER_MODULES[server]],
+        env=_subprocess_env(),             # 显式传递 MOCK_FAULT 等(白名单继承之外的变量)
         keep_alive=False,                  # 现起现用:会话结束即关子进程
         log_file=_server_log_file(server), # 横幅/日志进文件,不污染 CLI
     )
@@ -109,7 +125,26 @@ def call_tool_sync(server: str, tool: str, arguments: dict | None = None) -> Any
     return asyncio.run(wrap_tool_call(
         f"{server}.{tool}", invoke,
         tool_args=arguments, breaker=server,   # 熔断按 server 粒度
+        output=lambda content: _tool_output_summary(server, content),
     ))
+
+
+def _tool_output_summary(server: str, content: dict | list | None) -> dict | None:
+    """工具结果摘要写进 trace(评测指标与事实从 trace 提取)。
+
+    不落全量数据(留痕原则:摘要够用即可);酒店类额外记
+    "availability 全 0"(评测 error-02 的故障自检事实)。
+    """
+    if content is None:
+        return None
+    items = content if isinstance(content, list) else content.get("result", [])
+    if not isinstance(items, list):
+        items = [items]
+    summary: dict[str, Any] = {"count": len(items)}
+    if server == "hotel" and items:
+        summary["availability_all_zero"] = all(
+            i.get("availability", 0) == 0 for i in items)
+    return summary
 
 
 T = TypeVar("T")

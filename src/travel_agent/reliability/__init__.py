@@ -96,7 +96,7 @@ async def wrap_tool_call(
     tool_args: dict[str, Any] | None = None,
     breaker: str | None = None,
     pre_approved: bool = False,
-    output: dict[str, Any] | None = None,
+    output: dict[str, Any] | Callable[[Any], dict[str, Any] | None] | None = None,
 ) -> Any:
     """以 权限→熔断→打点(超时+重试) 包装一次工具调用,返回工具结果。
 
@@ -104,6 +104,8 @@ async def wrap_tool_call(
     - tool_args:参数 dict(写 trace 与权限摘要用)
     - breaker:熔断粒度名(默认用工具名;同 server 的工具建议传 server 名)
     - pre_approved:confirm 类工具是否已经用户同意
+    - output:结果摘要,写进 span.output。传 dict 直接用;传函数则
+      在拿到结果后调用(输出摘要依赖结果本身时用函数形式)。
     """
     tracer = get_tracer()
 
@@ -134,7 +136,7 @@ async def wrap_tool_call(
         if calls[0] > 1:
             span.mark_retry()             # 发生过重试:状态记 retry
         if output is not None:
-            span.set_output(output)
+            span.set_output(output(result) if callable(output) else output)
         brk.record_success()
         return result
 
