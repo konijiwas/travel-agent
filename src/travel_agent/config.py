@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
     analyst_model: str = ""              # 消融:需求分析换小模型时覆盖
-    structured_method: str = "auto"      # auto | function_calling | json_schema
+    structured_method: str = "function_calling"   # function_calling(DeepSeek 支持)| json_schema(DeepSeek 不支持,勿用)
     llm_temperature: float = 0.2
     llm_timeout_s: float = 60.0
 

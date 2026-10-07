@@ -145,8 +145,8 @@ def run_eval(cases_dir: str | None = None, checkpointer=None,
         console.print(f"[red]{run.case.task_id} 失败[/red](期望:{run.case.expected})")
         for result in run.outcome.failed:
             console.print(
-                f"  ✗ {result.fact} {result.operator} {result.expected!r} "
-                f"→ 实际 {result.actual!r} {result.note}")
+                f"  [x] {result.fact} {result.operator} {result.expected!r} "
+                f"-> 实际 {result.actual!r} {result.note}")
         if run.errors:
             console.print(f"  错误: {'; '.join(run.errors)[:200]}")
 
@@ -169,7 +169,7 @@ def run_eval(cases_dir: str | None = None, checkpointer=None,
     color = "green" if ok else "red"
     console.print(
         f"[bold {color}]总通过率: {passed}/{total} ({rate:.0%})"
-        f" —— {'达标 ✓' if ok else f'未达标(门槛 {PASS_THRESHOLD:.0%}),'
+        f" —— {'达标' if ok else f'未达标(门槛 {PASS_THRESHOLD:.0%}),'
         f'按失败明细修复后重跑(每 case 有 trace_id 可回放)'}[/bold {color}]")
     if verbose:
         console.print("\n[bold]失败 case 回放:[/bold]")
