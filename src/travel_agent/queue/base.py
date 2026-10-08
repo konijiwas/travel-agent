@@ -45,3 +45,28 @@ class MessageQueue(Protocol):
     def close(self) -> None:
         """释放连接资源。"""
         ...
+
+
+class NoOpQueue:
+    """空队列:所有操作都不产生效果(消融实验 ablate_queue 用)。
+
+    模拟"系统里没有消息队列"的场景:发布即丢弃、消费恒为空、
+    ack/close 为空操作、healthcheck 恒 True。状态机主流程由 state
+    驱动、不依赖队列,故消融后端到端正确性不变 —— 这正是 M9 要验证
+    的结论(队列是解耦架构层,而非正确性承重墙)。
+    """
+
+    def publish(self, msg: AgentMessage, stream: str = StreamName.TASKS.value) -> str:
+        return ""
+
+    def consume(self, stream, group, consumer, count=1, block_ms=5000):
+        return []
+
+    def ack(self, stream, group, msg_id) -> None:
+        return None
+
+    def healthcheck(self) -> bool:
+        return True
+
+    def close(self) -> None:
+        return None

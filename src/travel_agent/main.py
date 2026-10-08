@@ -7,6 +7,8 @@
     uv run python -m travel_agent.main run "从上海出发,2026-10-01 去杭州玩3天,2人,预算6000"
     uv run python -m travel_agent.main chat                 # 交互式(追问/确认/修改闭环)
     uv run python -m travel_agent.main replay <trace_id>    # 回放一次规划的打点轨迹
+    uv run python -m travel_agent.main eval                 # 跑评测集(15 case,≥80% 达标)
+    uv run python -m travel_agent.main ablate               # 消融实验(真实 LLM 模式)
     uv run python -m travel_agent.main config show          # 查看当前配置
 """
 
@@ -171,6 +173,20 @@ def eval_cmd(cases_dir: str | None, verbose: bool):
     raise SystemExit(0 if summary["rate"] >= PASS_THRESHOLD else 1)
 
 
+@app.command(name="ablate")
+@click.option("--cases", "cases_dir", default=None,
+              help="case 文件目录(默认 eval/cases)")
+def ablate_cmd(cases_dir: str | None):
+    """消融实验:逐个关闭功能开关重跑评测,量化每个功能对通过率的贡献。"""
+    from travel_agent.eval.ablate import print_ablation, run_ablation
+
+    if settings.eval_mode == "fake" or not settings.deepseek_api_key:
+        click.echo("错误:消融实验必须在真实 LLM 模式下运行(需配置 DEEPSEEK_API_KEY)。")
+        click.echo("      原因:预算/天气两个消融开关作用于 LLM 提示词,fake 离线解析器不响应,测不出退化。")
+        raise SystemExit(2)
+    print_ablation(run_ablation(cases_dir))
+
+
 @app.command(name="config")
 @click.argument("action")
 def config_cmd(action: str):
@@ -187,6 +203,7 @@ def config_cmd(action: str):
         "breaker_recovery_s", "cost_limit_usd", "cost_token_limit",
         "dry_run", "db_path", "trace_dir",
         "ablate_budget_adjust", "ablate_weather", "ablate_queue",
+        "ablate_small_gate",
     ]:
         click.echo(f"{key} = {getattr(settings, key)}")
 

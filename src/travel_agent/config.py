@@ -54,11 +54,11 @@ class Settings(BaseSettings):
     db_path: str = Field(str(PROJECT_ROOT / "data" / "travel.db"), validation_alias="TA_DB_PATH")
     trace_dir: str = Field(str(PROJECT_ROOT / "data" / "traces"), validation_alias="TA_TRACE_DIR")
 
-    # ── 消融开关(1 = 关闭该功能,供 M9 对照实验)──
-    ablate_budget_adjust: bool = False
-    ablate_weather: bool = False
-    ablate_queue: bool = False
-    ablate_small_gate: bool = False
+    # ── 消融开关(True = 关闭对应功能,供 M9 对照实验)──
+    ablate_budget_adjust: bool = Field(False, validation_alias="TA_ABLATE_BUDGET_ADJUST")
+    ablate_weather: bool = Field(False, validation_alias="TA_ABLATE_WEATHER")
+    ablate_queue: bool = Field(False, validation_alias="TA_ABLATE_QUEUE")
+    ablate_small_gate: bool = Field(False, validation_alias="TA_ABLATE_SMALL_GATE")
 
     # ── 评测 ──
     eval_mode: str = Field("llm", validation_alias="TA_EVAL_MODE")   # llm | fake(离线冒烟,不调用真实 API)

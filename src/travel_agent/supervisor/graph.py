@@ -19,6 +19,7 @@ from travel_agent.agents.executor.agent import Executor
 from travel_agent.config import settings
 from travel_agent.memory.checkpointer import build_checkpointer
 from travel_agent.memory.store import get_store
+from travel_agent.queue.base import NoOpQueue
 from travel_agent.queue.factory import get_queue
 from travel_agent.reliability import CostGuard, Tracer, get_tracer, set_guard, set_tracer
 from travel_agent.schemas.message import (
@@ -302,6 +303,8 @@ def route_after_confirm(state: SupervisorState) -> str:
 
 
 def route_after_gate(state: SupervisorState) -> str:
+    if settings.ablate_small_gate:
+        return "deliver"                       # 消融:跳过质量门,直接交付
     quality = state.get("quality")
     if quality is None or quality.passed or quality.retried:
         return "deliver"                       # 通过 / 重试耗尽 → 交付
@@ -322,7 +325,10 @@ def build_graph(checkpointer=None, queue=None):
 
     queue 参数供测试/CLI 注入自定义队列实例(默认按配置工厂创建)。
     """
-    queue = queue or get_queue()
+    if settings.ablate_queue:
+        queue = NoOpQueue()                      # 消融:事件/结果不走队列
+    else:
+        queue = queue or get_queue()
     builder = StateGraph(SupervisorState)
     # _traced:每个节点包一层 span(节点级打点,写 trace)
     builder.add_node("receive_input", _traced("receive_input", _make_receive_input(queue)))

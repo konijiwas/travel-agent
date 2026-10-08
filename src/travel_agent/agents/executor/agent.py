@@ -5,7 +5,8 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from travel_agent.agents.base import BaseAgent
-from travel_agent.agents.executor.prompts import SYSTEM_PROMPT
+from travel_agent.agents.executor.prompts import ABLATE_WEATHER_INSTRUCTION, SYSTEM_PROMPT
+from travel_agent.config import settings
 from travel_agent.schemas.budget import BudgetPlan
 from travel_agent.schemas.itinerary import Itinerary
 from travel_agent.schemas.options import DailyWeather, FlightOption, HotelOption
@@ -42,8 +43,11 @@ class Executor(BaseAgent):
             },
             ensure_ascii=False,
         )
+        system = SYSTEM_PROMPT
+        if settings.ablate_weather:
+            system += ABLATE_WEATHER_INSTRUCTION
         messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
+            SystemMessage(content=system),
             HumanMessage(content=payload),
         ]
         return self.invoke(messages)

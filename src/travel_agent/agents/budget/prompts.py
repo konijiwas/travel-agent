@@ -42,3 +42,11 @@ SYSTEM_PROMPT = """你是资深旅行预算规划师。你拿到一份结构化�
 
 ## 输出
 严格按 BudgetPlan schema 输出 JSON。"""
+
+
+ABLATE_ADJUST_INSTRUCTION = """
+
+## 消融开关(本次生效,优先级最高)
+本次**关闭超支检测与自动调整**:正常按上面的分项规则分配预算;
+不检测是否超支、不执行优先级链调整、不设置 needs_confirmation
+(保持 false)、adjustments 保持空列表。"""
